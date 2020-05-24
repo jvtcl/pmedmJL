@@ -56,13 +56,14 @@ pX = convert(Matrix, pX);
 #%% geographic constraints
 est_cols = [!endswith(i, 's') && i != "GEOID" for i in names(constraints_bg)]
 Y1 = convert(Matrix, constraints_trt[!,est_cols])
-Y2 = convert(Matrix, constraints_bg[!,est_cols])
+Y2 = convert(Matrix, constraints_bg[!,est_cols]);
 #%%
 
 #%% error variances
 se_cols = [endswith(i, 's') for i in names(constraints_bg)]
+se_cols = names(constraints_bg)[se_cols]
 V1 = map(x -> x^2, convert(Matrix, constraints_trt[!,se_cols]))
-V2 = map(x -> x^2, convert(Matrix, constraints_bg[!,se_cols]))
+V2 = map(x -> x^2, convert(Matrix, constraints_bg[!,se_cols]));
 #%%
 
 #%% Geographic crosswalk
@@ -99,6 +100,46 @@ A2 = Matrix(I, nrow(constraints_bg), nrow(constraints_bg))
 X1 = kron(transpose(pX), A1)
 X2 = kron(transpose(pX), A2)
 X = transpose(vcat(X1, X2))
+#%%
+
+#%% Design Weights
+q = repeat(wt, size(A1)[2])
+q = reshape(q, n, size(A1)[2])
+q = q / sum(q);
+#%%
+
+#%% Vectorize geo. constraints (Y) and normalize
+Y_vec = vec(vcat(Y1, Y2)) / N
+#%%
+
+#%% Vectorize variances and normalize
+V_vec = vec(vcat(V1, V2)) * (n / N^2)
+#%%
+
+#%% Diagonal matrix of variances
+sV = diagm(V_vec)
+#%%
+
+#%% Initial lambdas (test)
+λ = repeat([0], length(Y_vec));
+#%%
+
+#%% Compute the P_MEDM probabilities from q, X, λ
+compute_allocation = function(q, X, λ)
+
+    a = map(i -> i * exp.(-X * λ), q);
+    a = reshape(a, :, 1)
+
+    b = dot(transpose(q), exp.(-X * λ))
+
+    a / b
+
+end;
+#%%
+
+#%% test it
+@time phat = compute_allocation(q, X, λ)
+phat = reshape(phat, size(pX)[1], size(A2)[1])
 #%%
 
 #### MISC ####
