@@ -1,6 +1,9 @@
+#%%
 using CSV
 using DataFrames
 using SparseArrays
+using LinearAlgebra
+#%%
 
 #%% read in data
 # alt-shift-enter to run the cell
@@ -9,21 +12,15 @@ constraints_bg = CSV.read("data/toy_constraints_bg.csv")
 constraints_trt = CSV.read("data/toy_constraints_trt.csv")
 #%%
 
-endswith(names(constraints_bg)[1], 's')
-
-se_cols = [endswith(i, 's') for i in names(constraints_bg)]
-constraints_bg[:,se_cols]
-
-geo_lookup = DataFrame(bg = string.(collect(constraints_bg[:GEOID]), trt = string.(collect(constraints_bg[:GEOID])))
-
-# use `collect` to get column values
-collect(constraints_bg.GEOID)
-
-# or if we wanted to use numerical indices
-collect(constraints_bg[!,1])
-
+#%%
+# # use `collect` to get column values
+# collect(constraints_bg.GEOID)
+#
+# # or if we wanted to use numerical indices
+# collect(constraints_bg[!,1])
 # # this subsets rows
 # constraints_bg[1:2,:]
+#%%
 
 #%% build geo lookup
 # apply string conversion to bg GEOIDs
@@ -49,10 +46,11 @@ n = nrow(constraints_ind);
 #%% individual (PUMS) constraints
 # we need to use the ∉ symbol to represent a logical "not in"
 # type it as \notin + TAB
-constraint_cols = [i ∉ blah for i in names(constraints_ind)];
+excl = ["SERIAL", "PERWT"]
+constraint_cols = [i ∉ excl for i in names(constraints_ind)];
 pX = constraints_ind[!,constraint_cols];
 pX = convert(Matrix, pX);
-px = sparse(pX);
+# pX = sparse(pX);
 #%%
 
 #%% geographic constraints
@@ -62,10 +60,44 @@ Y2 = convert(Matrix, constraints_bg[!,est_cols])
 #%%
 
 #%% error variances
-se_cols = [endsWith(i, 's') for i in names(constraints_bg)]
-square(x) = x^2
-V1 = square.(convert(Matrix, constraints_trt[!,se_cols]))
-V2 = square.(convert(Matrix, constraints_bg[!,se_cols]))
+se_cols = [endswith(i, 's') for i in names(constraints_bg)]
+V1 = map(x -> x^2, convert(Matrix, constraints_trt[!,se_cols]))
+V2 = map(x -> x^2, convert(Matrix, constraints_bg[!,se_cols]))
+#%%
+
+#%% Geographic crosswalk
+# I think there is a MUCH more elegant way to do this
+# with dicts -- come back to this...
+
+A1 = []
+
+for G in unique(geo_lookup.trt)
+
+    blah = zeros(Int8, 1, nrow(constraints_bg))
+
+    isG = [occursin(G, g) for g in collect(geo_lookup.bg)]
+    for i in findall(isG)
+        blah[i] = 1
+    end
+    append!(A1, blah)
+
+end
+
+A1 = reshape(A1, nrow(constraints_bg), nrow(constraints_trt))
+A1 = transpose(A1)
+# A1 = sparse(A1)
+
+#%%
+
+#%% Target unit identity matrix
+# A2 = Matrix{Int8}(I, nrow(constraints_bg), nrow(constraints_bg))
+A2 = Matrix(I, nrow(constraints_bg), nrow(constraints_bg))
+# A2 = sparse(A2)
+#%%
+
+#%%
+X1 = kron(pX, A1) # this one doesn't work when A1 is sparse??
+X2 = kron(pX, A2)
 #%%
 
 #### MISC ####
@@ -78,3 +110,6 @@ square.(blah)
 constraints_bg[["GEOID", "CONST1"]] # columns
 constraints_bg[!,[1,4]] # columns by index
 constraints_bg[1:2,] # rows
+
+size(constraints_trt)
+size(constraints_bg)
