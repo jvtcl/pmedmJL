@@ -95,9 +95,10 @@ A2 = Matrix(I, nrow(constraints_bg), nrow(constraints_bg))
 # A2 = sparse(A2)
 #%%
 
-#%%
-X1 = kron(pX, A1) # this one doesn't work when A1 is sparse??
-X2 = kron(pX, A2)
+#%% Solution Space
+X1 = kron(transpose(pX), A1)
+X2 = kron(transpose(pX), A2)
+X = transpose(vcat(X1, X2))
 #%%
 
 #### MISC ####
