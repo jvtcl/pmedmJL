@@ -168,46 +168,18 @@ end;
 @time Yhat2 = (N * phat)' * pX;
 #%%
 
-#######
+#%% compute the tract constraint estimates
+phat_trt = (phat * N) * A1';
+Yhat1 = phat_trt' * pX
+#%%
 
+#%% Vectorize constraint estimates
+Yhat = vec(vcat(Yhat1, Yhat2))
+#%%
 
-sX = sparse(X)
-sX * λ
-sX * repeat([1], length(Y_vec))
-
-
-
-
-eachcol(pX)
-
-[transpose(i) * phat for i in eachcol(pX)]
-
-for i in eachrow(transpose(pX))
-    i' * phat
-end
-
-for i in eachcol(pX)
-    dot(phat', i)
-end
-
-
-
-
-blah = [1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0]
-
-@time blah = pX' * N * phat;
-sum(blah, 1)
-
-z = [3 4 5; 6 7 9; 15 -20 25]
-
-
-@time blah = (N * phat)' * pX
-
-
-size(phat)
-phat' * repeat([1], 15)
-
-foo = repeat([1], 15)
+#%% Assemble results
+Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
+#%%
 
 #### MISC ####
 # applying functions
