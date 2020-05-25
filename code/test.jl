@@ -132,7 +132,7 @@ sV = Diagonal(V_vec)
 #%%
 
 #%% Initial lambdas (test)
-λ = repeat([0], length(Y_vec));
+λ = repeat([0.], length(Y_vec));
 #%%
 
 #%% SCRATCH
@@ -216,10 +216,6 @@ end
 pe = penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V)
 #%%
 
-sum(pe)
-
--mean(pe)
-
 #%% Loss function
 max_ent = function(λ)
 
@@ -247,6 +243,38 @@ end
 #%%
 @time max_ent(λ)
 #%%
+
+using Optim
+# @time opt = optimize(max_ent, zeros(length(Y_vec)))
+@time opt = optimize(max_ent, zeros(length(Y_vec)), BFGS())
+
+# update lambda
+λ = Optim.minimizer(opt)
+
+max_ent(λ)
+
+#%%check results
+phat = compute_allocation(q, X, λ)
+phat = reshape(phat, size(pX)[1], size(A2)[1])
+
+Yhat2 = (N * phat)' * pX
+
+phat_trt = (phat * N) * A1'
+Yhat1 = phat_trt' * pX
+
+Yhat = vec(vcat(Yhat1, Yhat2))
+
+Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
+
+#90% MOEs
+Ype.MOE_lower = Ype.Y - (sqrt.(Ype.V) * 1.645);
+Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
+
+# Proportion of contstraints falling outside 90% MOE
+sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
+
+#%%
+
 
 #### MISC ####
 # # applying functions
