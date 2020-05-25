@@ -181,16 +181,50 @@ Yhat = vec(vcat(Yhat1, Yhat2))
 Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
 #%%
 
+#%% Primal Funciton (scratch)
+# w = Ype[1,:].Y
+# d = Ype[1,:].Yhat
+# v = Ype[1,:].V
+#
+# e = d - w
+#
+# penalty = (e^2 / (2 * v))
+#
+# ent = ((n / N) * (w / d) * log((w/d)))
+#
+# pe = (-1 * ent) - penalty
+#%%
+
+#%% Primal Function
+penalized_entropy = function(w, d, n, N, v)
+
+    e = d - w
+
+    penalty = (e^2 / (2 * v))
+
+    ent = ((n / N) * (w / d) * log((w/d)))
+
+    pe = (-1 * ent) - penalty
+
+    return pe
+
+end
+#%%
+
+#%% TEST - apply PE function
+penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V)
+#%%
+
 #### MISC ####
-# applying functions
-square(x) = x^2
-blah = [1,2,3]
-square.(blah)
-
-# subsetting
-constraints_bg[["GEOID", "CONST1"]] # columns
-constraints_bg[!,[1,4]] # columns by index
-constraints_bg[1:2,] # rows
-
-size(constraints_trt)
-size(constraints_bg)
+# # applying functions
+# square(x) = x^2
+# blah = [1,2,3]
+# square.(blah)
+#
+# # subsetting
+# constraints_bg[["GEOID", "CONST1"]] # columns
+# constraints_bg[!,[1,4]] # columns by index
+# constraints_bg[1:2,] # rows
+#
+# size(constraints_trt)
+# size(constraints_bg)
