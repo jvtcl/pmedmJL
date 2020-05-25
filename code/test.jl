@@ -5,6 +5,7 @@ using DataFrames
 using SparseArrays
 using LinearAlgebra
 using SuiteSparse
+using Statistics
 #%%
 
 #%% read in data
@@ -56,9 +57,10 @@ pX = convert(Matrix, pX);
 #%%
 
 #%% geographic constraints
-est_cols = [!endswith(i, 's') && i != "GEOID" for i in names(constraints_bg)]
-Y1 = convert(Matrix, constraints_trt[!,est_cols])
-Y2 = convert(Matrix, constraints_bg[!,est_cols]);
+est_cols_bg = [!endswith(i, 's') && i != "GEOID" for i in names(constraints_bg)]
+est_cols_trt = [!endswith(i, 's') && i != "GEOID" for i in names(constraints_trt)]
+Y1 = convert(Matrix, constraints_trt[!,est_cols_trt])
+Y2 = convert(Matrix, constraints_bg[!,est_cols_bg]);
 #%%
 
 #%% error variances
@@ -155,8 +157,7 @@ compute_allocation = function(q, X, λ)
 
     a/b
 
-
-end;
+end
 #%%
 
 #%% test it
@@ -181,7 +182,7 @@ Yhat = vec(vcat(Yhat1, Yhat2))
 Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
 #%%
 
-#%% Primal Funciton (scratch)
+#%% Primal function (scratch)
 # w = Ype[1,:].Y
 # d = Ype[1,:].Yhat
 # v = Ype[1,:].V
@@ -212,7 +213,39 @@ end
 #%%
 
 #%% TEST - apply PE function
-penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V)
+pe = penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V)
+#%%
+
+sum(pe)
+
+-mean(pe)
+
+#%% Loss function
+max_ent = function(λ)
+
+    phat = compute_allocation(q, X, λ)
+    phat = reshape(phat, size(pX)[1], size(A2)[1])
+
+    Yhat2 = (N * phat)' * pX
+
+    phat_trt = (phat * N) * A1'
+    Yhat1 = phat_trt' * pX
+
+    Yhat = vec(vcat(Yhat1, Yhat2))
+
+    Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
+
+    pe = penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V)
+
+    loss = -mean(pe)
+
+    return(loss)
+
+end
+#%%
+
+#%%
+@time max_ent(λ)
 #%%
 
 #### MISC ####
