@@ -1,8 +1,10 @@
 #%%
+using Base
 using CSV
 using DataFrames
 using SparseArrays
 using LinearAlgebra
+using SuiteSparse
 #%%
 
 #%% read in data
@@ -106,6 +108,7 @@ X = transpose(vcat(X1, X2))
 q = repeat(wt, size(A1)[2])
 q = reshape(q, n, size(A1)[2])
 q = q / sum(q);
+q = vec(q)
 #%%
 
 #%% Vectorize geo. constraints (Y) and normalize
@@ -117,30 +120,94 @@ V_vec = vec(vcat(V1, V2)) * (n / N^2)
 #%%
 
 #%% Diagonal matrix of variances
-sV = diagm(V_vec)
+# sV = diagm(V_vec)
+sV = Diagonal(V_vec)
+#%%
+
+#%% sparsify inputs
+# X = sparse(X)
+# sV = sparse(sV)
 #%%
 
 #%% Initial lambdas (test)
 λ = repeat([0], length(Y_vec));
 #%%
 
+#%% SCRATCH
+# a0 = exp.(-X * λ);
+#
+# # use `.*` to broadcast vector (element-wise vs. object-wise multiplication)
+# a = a0 .* q;
+#
+# b = q' * a0;
+#
+# a/b;
+#%%
+
 #%% Compute the P_MEDM probabilities from q, X, λ
 compute_allocation = function(q, X, λ)
 
-    a = map(i -> i * exp.(-X * λ), q);
-    a = reshape(a, :, 1)
+    a0 = exp.(-X * λ)
 
-    b = dot(transpose(q), exp.(-X * λ))
+    a = a0 .* q;
 
-    a / b
+    b = q' * a0
+
+    a/b
+
 
 end;
 #%%
 
 #%% test it
 @time phat = compute_allocation(q, X, λ)
-phat = reshape(phat, size(pX)[1], size(A2)[1])
+@time phat = reshape(phat, size(pX)[1], size(A2)[1])
 #%%
+
+#%% compute the block group constraint estimates
+@time Yhat2 = (N * phat)' * pX;
+#%%
+
+#######
+
+
+sX = sparse(X)
+sX * λ
+sX * repeat([1], length(Y_vec))
+
+
+
+
+eachcol(pX)
+
+[transpose(i) * phat for i in eachcol(pX)]
+
+for i in eachrow(transpose(pX))
+    i' * phat
+end
+
+for i in eachcol(pX)
+    dot(phat', i)
+end
+
+
+
+
+blah = [1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0]
+
+@time blah = pX' * N * phat;
+sum(blah, 1)
+
+z = [3 4 5; 6 7 9; 15 -20 25]
+
+
+@time blah = (N * phat)' * pX
+
+
+size(phat)
+phat' * repeat([1], 15)
+
+foo = repeat([1], 15)
 
 #### MISC ####
 # applying functions
