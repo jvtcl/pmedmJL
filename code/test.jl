@@ -107,18 +107,20 @@ X = transpose(vcat(X1, X2))
 #%%
 
 #%% Design Weights
-q = repeat(wt, size(A1)[2])
-q = reshape(q, n, size(A1)[2])
+q = repeat(wt, size(A1)[2]);
+q = reshape(q, n, size(A1)[2]);
 q = q / sum(q);
-q = vec(q)
+q = vec(q')
 #%%
 
 #%% Vectorize geo. constraints (Y) and normalize
-Y_vec = vec(vcat(Y1, Y2)) / N
+# Y_vec = vec(vcat(Y1, Y2)) / N
+Y_vec = vcat(vec(Y1), vec(Y2)) / N; # fix
 #%%
 
 #%% Vectorize variances and normalize
-V_vec = vec(vcat(V1, V2)) * (n / N^2)
+# V_vec = vec(vcat(V1, V2)) * (n / N^2)
+V_vec = vcat(vec(V1), vec(V2)) * (n / N^2); # fix
 #%%
 
 #%% Diagonal matrix of variances
@@ -161,25 +163,25 @@ end
 #%%
 
 #%% test it
-@time phat = compute_allocation(q, X, λ)
-@time phat = reshape(phat, size(pX)[1], size(A2)[1])
+# @time phat = compute_allocation(q, X, λ)
+# @time phat = reshape(phat, size(pX)[1], size(A2)[1])
 #%%
 
 #%% compute the block group constraint estimates
-@time Yhat2 = (N * phat)' * pX;
+# @time Yhat2 = (N * phat)' * pX;
 #%%
 
 #%% compute the tract constraint estimates
-phat_trt = (phat * N) * A1';
-Yhat1 = phat_trt' * pX
+# Yhat1 = phat_trt' * pX
+# phat_trt = (phat * N) * A1';
 #%%
 
 #%% Vectorize constraint estimates
-Yhat = vec(vcat(Yhat1, Yhat2))
+# Yhat = vec(vcat(Yhat1, Yhat2))
 #%%
 
 #%% Assemble results
-Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
+# Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
 #%%
 
 #%% Primal function (scratch)
@@ -201,11 +203,11 @@ penalized_entropy = function(w, d, n, N, v)
 
     e = d - w
 
-    penalty = (e^2 / (2 * v))
+    penalty = (e^2 / (2. * v))
 
     ent = ((n / N) * (w / d) * log((w/d)))
 
-    pe = (-1 * ent) - penalty
+    pe = (-1. * ent) - penalty
 
     return pe
 
@@ -213,56 +215,59 @@ end
 #%%
 
 #%% TEST - apply PE function
-pe = penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V)
+# pe = penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V)
 #%%
 
-#%% Loss function
-max_ent = function(λ)
+#%% Objective function
+neg_pe = function(λ)
 
     phat = compute_allocation(q, X, λ)
-    phat = reshape(phat, size(pX)[1], size(A2)[1])
+    # phat = reshape(phat, size(pX)[1], size(A2)[1])
+    phat = reshape(phat, size(A2)[1], size(pX)[1])'; # FIX - row-major reshaping - matches
 
     Yhat2 = (N * phat)' * pX
 
     phat_trt = (phat * N) * A1'
     Yhat1 = phat_trt' * pX
 
-    Yhat = vec(vcat(Yhat1, Yhat2))
+    # Yhat = vec(vcat(Yhat1, Yhat2))
+    Yhat = vcat(vec(Yhat1), vec(Yhat2)); # FIX
 
     Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
 
     pe = penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V)
 
-    loss = -mean(pe)
-
-    return(loss)
+    -1. * mean(pe)
 
 end
 #%%
 
 #%%
-@time max_ent(λ)
+# @time neg_pe(λ)
 #%%
 
 using Optim
-# @time opt = optimize(max_ent, zeros(length(Y_vec)))
-@time opt = optimize(max_ent, zeros(length(Y_vec)), BFGS())
+# @time opt = optimize(neg_pe, zeros(length(Y_vec)),
+#                     Optim.Options(show_trace=true))
+
+@time opt = optimize(neg_pe, zeros(length(Y_vec)), BFGS(), autodiff = :forward,
+            Optim.Options(show_trace=true, iterations = 200))
 
 # update lambda
 λ = Optim.minimizer(opt)
 
-max_ent(λ)
+neg_pe(λ)
 
 #%%check results
 phat = compute_allocation(q, X, λ)
-phat = reshape(phat, size(pX)[1], size(A2)[1])
+phat = reshape(phat, size(A2)[1], size(pX)[1])'; # FIX - row-major reshaping - matches
 
 Yhat2 = (N * phat)' * pX
 
 phat_trt = (phat * N) * A1'
 Yhat1 = phat_trt' * pX
 
-Yhat = vec(vcat(Yhat1, Yhat2))
+Yhat = vcat(vec(Yhat1), vec(Yhat2)); # FIX - matches
 
 Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
 
@@ -275,6 +280,68 @@ sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
 
 #%%
 
+###########
+## with BlackBoxOptim
+# using BlackBoxOptim
+#
+# res = bboptimize(neg_pe; InitialCandidate = repeat([0.], length(Y_vec)), NumDimensions = length(λ), method = :dxnes)
+#
+# λf = best_candidate(res);
+# neg_pe(λf)
+
+# neg_pe(repeat([0.], length(Y_vec)))
+
+# ####### TROUBLESHOOTING (OLD) #########
+#
+# ### solution from python
+# λf = [ 0.53389188, -0.0379973, -0.50200761, -0.16321265, -0.13225007,
+#         0.57743544, -0.03988062,  0.22363727,  0.23495304, -0.604144  ,
+#        -0.11663491,  0.26081404, -1.22108342,  0.31515081,  1.43999659,
+#         0.38795166, -0.42577341, -0.61241939, -0.92714886, -1.7774103 ,
+#         0.98007359,  1.8342036 , -0.67483984, -0.87041146,  1.38211506,
+#        -1.02380534,  0.89157858, -0.38641539,  1.32246777,  2.00724413,
+#        -2.15040901, -0.21542829,  1.92205921,  0.81691693, -2.77884608,
+#         1.35971006, -1.1360607 ,  0.85969393,  0.49921946,  0.93573072,
+#         0.20624954, -2.26602294,  1.85283508, -0.98020062, -1.47673084,
+#        -0.66216718,  0.54559164,  0.38439201,  0.38497734,  2.09420423,
+#        -0.6503332 , -1.95243673]
+# neg_pe(λf) # doesn't match
+
+# compute_allocation(q, X, λf)
+
+#%% TEST COMPUTE ALLOCATION (all good)
+# a0 = exp.(-X * λf); # matches
+#
+# # use `.*` to broadcast vector (element-wise vs. object-wise multiplication)
+# a = a0 .* q; # matches
+#
+# b = q' * a0; # matches
+#
+# blah = a/b; # matches
+#%%
+
+#%% TEST RECONSTRUCT CONSTRAINTS
+# phat = compute_allocation(q, X, λf); # matches
+# # phat = reshape(phat, size(pX)[1], size(A2)[1]);
+# phat = reshape(phat, size(A2)[1], size(pX)[1])'; # FIX - row-major reshaping - matches
+#
+# Yhat2 = (N * phat)' * pX; # matches
+#
+# phat_trt = (phat * N) * A1'; # matches
+# Yhat1 = phat_trt' * pX; # matches
+#
+# # Yhat = vec(vcat(Yhat1, Yhat2));
+# Yhat = vcat(vec(Yhat1), vec(Yhat2)); # FIX - matches
+#
+# Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n)); # matches
+#%%
+
+#%% TEST - objective fn
+# pe = penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V);
+#
+# -1. * mean(pe) # matches
+
+#%%
 
 #### MISC ####
 # # applying functions
