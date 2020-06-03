@@ -143,7 +143,7 @@ end
 #%% Objective function (PMEDMrcpp style)
 f = function(λ)
 
-    qXl = exp.(-X * λ) .* q
+    qXl = q .* exp.(-X * λ)
     p = qXl / sum(qXl)
 
     Xp = X' * p
@@ -154,29 +154,57 @@ f = function(λ)
 end
 #%%
 
+#%%
+# # @time neg_pe(λ)
+# init_λ = zeros(length(Y_vec))
+
+λ = zeros(length(Y_vec))
+# λ = sparse(λ);
+
+# # init_λ = repeat([0.], length(Y_vec))
+# # init_λ = Y_vec + (sV * λ) - Xp;
+# # init_λ = rand(length(Y_vec));
+# @time f(init_λ)
+#%%
+
+## making λ sparse is the only thing that seems to help time-wise
+# q = sparse(q);
+# X = dropzeros(X)
+@time f(λ)
 
 #%%
-# @time neg_pe(λ)
-init_λ = zeros(length(Y_vec))
-# init_λ = repeat([0.], length(Y_vec))
-# init_λ = Y_vec + (sV * λ) - Xp;
-# init_λ = rand(length(Y_vec));
-@time f(init_λ)
+# using ForwardDiff
+# # @time Y_vec + (sV * λ) - Xp
+# @time ForwardDiff.gradient(f, λ)
+#%%
+
+#%% Gradient function
+g! = function(G, λ)
+    qXl = q .* exp.(-X * λ)
+    p = qXl / sum(qXl)
+    Xp = X'p
+    G[:] = Y_vec + (sV * λ) - Xp
+end
+
+@time g!(zeros(length(λ)), λ)
 #%%
 
 #%%
 using Optim
-# @time opt = optimize(f, init_λ, BFGS(),
-#                     Optim.Options(show_trace=true, iterations = 10))
-#
-# SLOW!! ~3.74 hours
-@time opt = optimize(f, init_λ, BFGS(), autodiff = :forward,
-            Optim.Options(show_trace=true, iterations = 100))
+
+init_λ = zeros(length(Y_vec))
+# init_λ = rand(length(Y_vec))
+@time opt = optimize(f, g!, init_λ, LBFGS(),
+                    Optim.Options(show_trace=true, iterations = 200))
+
+# # SLOW!! ~3.74 hours
+# @time opt = optimize(f, init_λ, BFGS(), autodiff = :forward,
+#             Optim.Options(show_trace=true, iterations = 10)) # orig 100
 #%%
 
 #%%
 # final lambda
-λ = Optim.minimizer(opt)
+λ = Optim.minimizer(opt);
 #%%
 
 # # dump results

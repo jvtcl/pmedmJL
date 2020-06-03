@@ -161,28 +161,37 @@ end
 
 # qXl = exp.(-X * λ) .* q
 # p = qXl / sum(qXl)
-# Xp = X' * p
-# Y_vec + (sV * λ) - Xp # gradient fn
-# -((X'p) * (p'X)) + (X'Diagonal(p) * X) + sV # 2nd derivative
+# Xp = X'p
+#
+# (Y_vec + (sV * λ)) - Xp
+# -((X'p) * (p'X)) + (X'Diagonal(p) * X) + sV
+
 
 #%% Gradient/init
-# g! = function(G, λ)
-#     qXl = exp.(-X * λ) .* q
-#     p = qXl / sum(qXl)
-#     Xp = X' * p
-#     G[1] = Y_vec + (sV * λ) - Xp
-#     G[2] = -((X'p) * (p'X)) + (X'Diagonal(p) * X) + sV
+# g! = function(storage, x)
+#     # qXl = exp.(-X * λ) .* q
+#     # p = qXl / sum(qXl)
+#     # Xp = X'p
+#     # # storage[1] = Y_vec + (sV * λ) - Xp
+#     # storage[1] = (Y_vec + (sV * x)) - Xp
+#     # storage[2] = -((X'p) * (p'X)) + (X'Diagonal(p) * X) + sV
 # end
 #%%
 
-`# sV * λ
-# sV * λ[2]
-`
+# (Y_vec' + λ'sV) * diff(λ)
+#
+# (1 / (q'exp.(-X * λ))) .* (exp.(-X * λ)' * (-X))
+
 
 #%% TEST - apply PE function
 # f(init_x)
-# g!(λ) # init
+g!(zeros(length(Y_vec))) # init
 #%%
+
+# samesies
+using ForwardDiff
+@time Y_vec + (sV * λ) - Xp
+@time ForwardDiff.gradient(f, λ)
 
 #%%
 using Optim
