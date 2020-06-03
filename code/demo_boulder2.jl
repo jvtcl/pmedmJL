@@ -48,6 +48,11 @@ pX = constraints_ind[!,constraint_cols];
 pX = convert(Matrix, pX);
 #%%
 
+#%%
+# pX = sparse(pX)
+# pX = dropzeros(pX);
+#%%
+
 #%% geographic constraints
 est_cols_bg = [!endswith(i, 's') && i != "GEOID" for i in names(constraints_bg)]
 est_cols_trt = [!endswith(i, 's') && i != "GEOID" for i in names(constraints_trt)]
@@ -66,11 +71,11 @@ V2 = map(x -> x^2, convert(Matrix, constraints_bg[!,se_cols]));
 # I think there is a MUCH more elegant way to do this
 # with dicts -- come back to this...
 
-A1 = []
+A1 = Int64[]
 
 for G in unique(geo_lookup.trt)
 
-    blah = zeros(Int8, 1, nrow(constraints_bg))
+    blah = zeros(Int64, 1, nrow(constraints_bg))
 
     isG = [occursin(G, g) for g in collect(geo_lookup.bg)]
     for i in findall(isG)
@@ -83,6 +88,7 @@ end
 A1 = reshape(A1, nrow(constraints_bg), nrow(constraints_trt))
 A1 = transpose(A1)
 # A1 = sparse(A1)
+# A1 = dropzeros(A1)
 
 #%%
 
@@ -90,10 +96,16 @@ A1 = transpose(A1)
 A2 = Matrix(I, nrow(constraints_bg), nrow(constraints_bg))
 #%%
 
+#%%
+# A1 = dropzeros(sparse(A1))
+# A2 = dropzeros(sparse(A2))
+#%%
+
 #%% Solution Space
 X1 = (sparse(pX') ⊗ A1)'
 X2 = (sparse(pX') ⊗ A2)'
 @time X = hcat(sparse(X1), sparse(X2));
+# X = dropzeros(X)
 #%%
 
 #%% clear intermediates
@@ -121,186 +133,59 @@ V_vec = vcat(vec(V1), vec(V2)) * (n / N^2); # fix
 sV = Diagonal(V_vec)
 #%%
 
-#%% Initial lambdas (test)
-λ = zeros(length(Y_vec));
-
-# # test values
-# λ = sprandn(1665, 1.);
 #%%
-
-#%% SCRATCH
-
-# blah = zeros(size(X)[1])
-# mul!(blah, -X, λ);
-#
-# # # this works for `X * λ` but is super slow
-# # @time blah = [sum(λ[-X[i,:].nzind]) for i in X.rowval]
-#
-# a0 = exp.(blah);
-#
-# # use `.*` to broadcast vector (element-wise vs. object-wise multiplication)
-# a = a0 .* q;
-#
-# b = q' * a0;
-#
-# a/b;
-#%%
-
-#%% Compute the P_MEDM probabilities from q, X, λ
 compute_allocation = function(q, X, λ)
+    qXl = exp.(-X * λ) .* q
+    qXl / sum(qXl)
+end
+#%%
 
-    blah = zeros(size(X)[1])
-    mul!(blah, -X, sparse(λ));
-    a0 = exp.(blah);
+#%% Objective function (PMEDMrcpp style)
+f = function(λ)
 
-    a = a0 .* q;
+    qXl = exp.(-X * λ) .* q
+    p = qXl / sum(qXl)
 
-    b = q' * a0
+    Xp = X' * p
+    lvl = λ' * (sV * λ);
 
-    a/b
+    return (Y_vec' * λ) + log(sum(qXl)) + (0.5 * lvl)
 
 end
 #%%
 
-#%% test it
-# X = Matrix(X)
-@time phat = compute_allocation(q, X, λ);
-@time phat = reshape(phat, size(pX)[1], size(A2)[1])
-#%%
-
-#%% compute the block group constraint estimates
-@time Yhat2 = (N * phat)' * sparse(pX);
-#%%
-
-#%% compute the tract constraint estimates
-phat_trt = (phat * N) * A1'
-@time Yhat1 = phat_trt' * pX;
-#%%
-
-#%% Vectorize constraint estimates
-Yhat = vec(vcat(Yhat1, Yhat2))
-#%%
-
-#%% Assemble results
-Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n));
-#%%
-
-#%% Primal function (scratch)
-# w = Ype[1,:].Y
-# d = Ype[1,:].Yhat
-# v = Ype[1,:].V
-#
-# e = d - w
-#
-# penalty = (e^2 / (2 * v))
-#
-# ent = ((n / N) * (w / d) * log((w/d)))
-#
-# pe = (-1 * ent) - penalty
-#%%
-
-#%% Primal Function
-penalized_entropy = function(w, d, n, N, v)
-
-    e = d - w
-
-    penalty = (e^2 / (2. * v))
-
-    ent = ((n / N) * (w / d) * log((w/d)))
-
-    pe = (-1. * ent) - penalty
-
-    return pe
-
-end
-#%%
-
-#%% TEST - apply PE function
-pe = penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V);
-#%%
-
-#%% Objective function
-neg_pe = function(λ)
-
-    phat = compute_allocation(q, X, λ);
-    # phat = reshape(phat, size(pX)[1], size(A2)[1])
-    phat = reshape(phat, size(A2)[1], size(pX)[1])'; # FIX - row-major reshaping - matches
-
-    Yhat2 = (N * phat)' * pX
-
-    phat_trt = (phat * N) * A1'
-    Yhat1 = phat_trt' * pX
-
-    # Yhat = vec(vcat(Yhat1, Yhat2))
-    Yhat = vcat(vec(Yhat1), vec(Yhat2)); # FIX
-
-    Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
-
-    pe = penalized_entropy.(Ype.Y, Ype.Yhat, n, N, Ype.V)
-
-    # pe[isnan.(pe)] .= 0
-
-    # -1. * mean(pe)
-    -1. * mean(filter(!isnan, pe))
-
-end
-#%%
 
 #%%
-@time neg_pe(λ)
+# @time neg_pe(λ)
+init_λ = zeros(length(Y_vec))
+# init_λ = repeat([0.], length(Y_vec))
+# init_λ = Y_vec + (sV * λ) - Xp;
+# init_λ = rand(length(Y_vec));
+@time f(init_λ)
 #%%
 
 #%%
 using Optim
-# @time opt = optimize(neg_pe, zeros(length(Y_vec)), BFGS(),
-                    # Optim.Options(show_trace=true, iterations = 10))
-
-@time opt = optimize(neg_pe, zeros(length(Y_vec)), LBFGS(), autodiff = :forward,
-            Optim.Options(show_trace=true, iterations = 5))
+# @time opt = optimize(f, init_λ, BFGS(),
+#                     Optim.Options(show_trace=true, iterations = 10))
+#
+# SLOW!! ~3.74 hours
+@time opt = optimize(f, init_λ, BFGS(), autodiff = :forward,
+            Optim.Options(show_trace=true, iterations = 100))
 #%%
 
 #%%
-# update lambda
+# final lambda
 λ = Optim.minimizer(opt)
-
-neg_pe(λ)
-
-# #%%check results
-# phat = compute_allocation(q, X, λ)
-# phat = reshape(phat, size(A2)[1], size(pX)[1])'; # FIX - row-major reshaping - matches
-#
-# Yhat2 = (N * phat)' * pX
-#
-# phat_trt = (phat * N) * A1'
-# Yhat1 = phat_trt' * pX
-#
-# Yhat = vcat(vec(Yhat1), vec(Yhat2)); # FIX - matches
-#
-# Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
-#
-# #90% MOEs
-# Ype.MOE_lower = Ype.Y - (sqrt.(Ype.V) * 1.645);
-# Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
-#
-# # Proportion of contstraints falling outside 90% MOE
-# sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
-
 #%%
 
-###########
-#%% with BlackBoxOptim
-using BlackBoxOptim
+# # dump results
+# CSV.write("data/boulder_run1.csv", DataFrame(lambda = λ));
+
 #
-res = bboptimize(neg_pe; InitialCandidate = λ, NumDimensions = length(λ), MaxSteps = 10, method = :ProbabalisticDescent)
-
-λf = best_candidate(res);
-
-neg_pe(λf)
-#%%
-
 #%%check results
-# phat = compute_allocation(q, X, zeros(length(Y_vec)))
-phat = compute_allocation(q, X, λf) # final
+
+phat = compute_allocation(q, X, λ)
 phat = reshape(phat, size(A2)[1], size(pX)[1])'; # FIX - row-major reshaping - matches
 
 Yhat2 = (N * phat)' * pX
@@ -320,3 +205,123 @@ Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
 sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
 
 #%%
+#
+# ###########
+#%% with BlackBoxOptim
+# using BlackBoxOptim
+# #
+# res = bboptimize(f; InitCandidate = init_λ, NumDimensions = length(init_λ), MaxSteps = 10, SearchRange = (-5.,5.), method = :ProbabalisticDescent)
+#%%
+#
+# #%%
+# λf = best_candidate(res);
+#
+# neg_pe(λf)
+# #%%
+#
+# #%%check results
+# # phat = compute_allocation(q, X, zeros(length(Y_vec)))
+# phat = compute_allocation(q, X, λf) # final
+# phat = reshape(phat, size(A2)[1], size(pX)[1])'; # FIX - row-major reshaping - matches
+#
+# Yhat2 = (N * phat)' * pX
+#
+# phat_trt = (phat * N) * A1'
+# Yhat1 = phat_trt' * pX
+#
+# Yhat = vcat(vec(Yhat1), vec(Yhat2)); # FIX - matches
+#
+# Ype = DataFrame(Y = Y_vec * N, Yhat = Yhat, V = V_vec * (N^2/n))
+#
+# #90% MOEs
+# Ype.MOE_lower = Ype.Y - (sqrt.(Ype.V) * 1.645);
+# Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
+#
+# # Proportion of contstraints falling outside 90% MOE
+# sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
+#
+# #%%
+#
+# ################
+#
+# ## matching pmedm.cpp
+# blah = zeros(size(X)[1]);
+# mul!(blah, -X, sparse(λ));
+# a0 = exp.(blah);
+# qXl = a0 .* q;
+#
+# p = qXl / sum(qXl);
+#
+# blah2 = zeros(size(X)[2]);
+# Xp = mul!(blah2, X', p);
+#
+# lvl = λ' * (sV * λ);
+#
+# fun = (Y_vec' * λ) + log(sum(qXl)) + (0.5 * lvl)
+#
+# grad = Y_vec + (sV * λ) - Xp
+#
+# #%%
+#
+# #%%
+# function prob(λ)
+#     blah = zeros(size(X)[1]);
+#     mul!(blah, -X, λ);
+#     a0 = exp.(blah);
+#     qXl = a0 .* q;
+#
+#     return (qXl / sum(qXl))
+# end
+# #%%
+#
+# #%%
+# function f(λ)
+#
+#     blah = zeros(size(X)[1]);
+#     mul!(blah, -X, λ);
+#     a0 = exp.(blah);
+#     qXl = a0 .* q;
+#
+#     p = qXl / sum(qXl);
+#
+#     blah2 = zeros(size(X)[2]);
+#     Xp = mul!(blah2, X', p)
+#     lvl = λ' * (sV * λ);
+#
+#     return (Y_vec' * λ) + log(sum(qXl)) + (0.5 * lvl)
+# end
+# #%%
+#
+# #%%
+# function g!(λ)
+#
+#     blah = zeros(size(X)[1]);
+#     mul!(blah, -X, λ);
+#     a0 = exp.(blah);
+#     qXl = a0 .* q;
+#
+#     p = qXl / sum(qXl);
+#
+#     blah2 = zeros(size(X)[2]);
+#     Xp = mul!(blah2, X', p);
+#
+#     return (Y_vec + (sV * λ) - Xp)
+# end
+# #%%
+#
+# #%%
+# init_λ = sparse(zeros(length(Y_vec)))
+# # p = prob(λ)
+#
+# # λ = sprand(1665, 1.)
+# #%%
+#
+# #%%
+# f(init_λ)
+# g!(init_λ)
+# #%%
+#
+# #%%
+# # optimize(f, g!, init_λ, BFGS(), Optim.Options(show_trace=true, iterations = 5))
+# # optimize(f, init_λ, BFGS(), autodiff = :forward, Optim.Options(show_trace=true, iterations = 5))
+# #%%
