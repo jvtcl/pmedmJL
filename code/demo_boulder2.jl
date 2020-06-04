@@ -189,20 +189,53 @@ end
 @time g!(zeros(length(λ)), λ)
 #%%
 
+#%% Hessian
+h! = function(H, λ)
+    qXl = q .* exp.(-X * λ)
+    p = qXl / sum(qXl)
+    dp = sparse(Diagonal(p))
+    H[:] = -((X'p) * (p'X)) + (X' * dp * X) + sV
+end
+#%%
+
+# @time h!(Array{Float64}(undef, 1665, 1665), init_λ)
+
+# precond = function(n)
+#     spdiagm((-ones(n-1), 2*ones(n), -ones(n-1)), (-1,0,1), n, n)*(n+1)
+# end
+#
+# precond(1665)
+#
+# n = 1665
+# spdiagm((-ones(n-1), 2*ones(n), -ones(n-1)), (-1,0,1), n, n)*(n+1)
+#
+# precond(1665)
+#
+# spdiagm(-1 => [1,2,3,4], 1 => [4,3,2,1])
+
 #%%
 using Optim
 
-init_λ = zeros(length(Y_vec))
+init_λ = zeros(length(Y_vec));
 # init_λ = rand(length(Y_vec))
-@time opt = optimize(f, g!, init_λ, LBFGS(),
+
+# SOME NOTES ON THE DIFFERENT SOLVERS
+#
+# - TRUST REGION is extremely slow - MUCH faster with precomputed Hessian
+#
+# - GRADIENT DESCENT does not converge at 1000 iterations
+#   but gives a reasonable solution (0.84% constraints unmatched)
+
+@time opt = optimize(f, g!, h!, init_λ, NewtonTrustRegion(),
                     Optim.Options(show_trace=true, iterations = 200))
+
+# @time opt = optimize(f, g!, init_λ, GradientDescent(),
+                    # Optim.Options(show_trace=true, iterations = 1000))
 
 # # SLOW!! ~3.74 hours
 # @time opt = optimize(f, init_λ, BFGS(), autodiff = :forward,
 #             Optim.Options(show_trace=true, iterations = 10)) # orig 100
-#%%
 
-#%%
 # final lambda
 λ = Optim.minimizer(opt);
 #%%

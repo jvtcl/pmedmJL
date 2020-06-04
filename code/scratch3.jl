@@ -154,44 +154,13 @@ end
 #%%
 
 #%%
-#
-# Xp = X' * p;
-# return (Y_vec + (sV * λ) - Xp)
+g! = function(G, λ)
+    qXl = q .* exp.(-X * λ)
+    p = qXl / sum(qXl)
+    Xp = X'p
+    G[:] = Y_vec + (sV * λ) - Xp
+end
 #%%
-
-# qXl = exp.(-X * λ) .* q
-# p = qXl / sum(qXl)
-# Xp = X'p
-#
-# (Y_vec + (sV * λ)) - Xp
-# -((X'p) * (p'X)) + (X'Diagonal(p) * X) + sV
-
-
-#%% Gradient/init
-# g! = function(storage, x)
-#     # qXl = exp.(-X * λ) .* q
-#     # p = qXl / sum(qXl)
-#     # Xp = X'p
-#     # # storage[1] = Y_vec + (sV * λ) - Xp
-#     # storage[1] = (Y_vec + (sV * x)) - Xp
-#     # storage[2] = -((X'p) * (p'X)) + (X'Diagonal(p) * X) + sV
-# end
-#%%
-
-# (Y_vec' + λ'sV) * diff(λ)
-#
-# (1 / (q'exp.(-X * λ))) .* (exp.(-X * λ)' * (-X))
-
-
-#%% TEST - apply PE function
-# f(init_x)
-g!(zeros(length(Y_vec))) # init
-#%%
-
-# samesies
-using ForwardDiff
-@time Y_vec + (sV * λ) - Xp
-@time ForwardDiff.gradient(f, λ)
 
 #%%
 using Optim
@@ -201,11 +170,11 @@ init_x = zeros(length(Y_vec))
 
 # f(init_x)
 
-# @time opt = optimize(f, g!, init_x, BFGS(),
-#             Optim.Options(show_trace=true, iterations = 200));
+@time opt = optimize(f, g!, init_x, NewtonTrustRegion(),
+            Optim.Options(show_trace=true, iterations = 200));
 
-@time opt = optimize(f, init_x, BFGS(), autodiff = :forward,
-            Optim.Options(show_trace=true, iterations = 200))
+# @time opt = optimize(f, init_x, BFGS(), autodiff = :forward,
+            # Optim.Options(show_trace=true, iterations = 200))
 
 # update lambda
 λ = Optim.minimizer(opt)
