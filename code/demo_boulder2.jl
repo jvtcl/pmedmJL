@@ -179,10 +179,7 @@ init_λ = zeros(length(Y_vec));
 # - GRADIENT DESCENT does not converge at 1000 iterations
 #   I think it needs a preconditioner
 # @time opt = optimize(f, g!, h!, init_λ, GradientDescent(),
-                    # Optim.Options(show_trace=true, iterations = 200));
-
-# @time opt = optimize(f, g!, init_λ, GradientDescent(),
-                    # Optim.Options(show_trace=true, iterations = 1000));
+                    # Optim.Options(show_trace=true, iterations = 200,));
 #%%
 
 #%%
@@ -199,7 +196,9 @@ init_λ = zeros(length(Y_vec));
 #%%check results
 # final lambda
 λ = Optim.minimizer(opt);
+#%%
 
+#%%
 phat = compute_allocation(q, X, λ)
 phat = reshape(phat, size(A2)[1], size(pX)[1])'; # FIX - row-major reshaping - matches
 
@@ -221,4 +220,61 @@ Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
 # Rcpp version ~14.8%
 sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
 
+#%%
+
+#### Reliability Assessment
+
+#%% final allocaiton probabilities
+p = compute_allocation(q, X, λ);
+#%%
+
+#%% compute covariances on λ (inverse Hessian)
+H = h!(Array{Float64}(undef, length(λ), length(λ)), λ);
+covλ = inv(H) / N;
+#%%
+
+#%% simulate λ
+using Random
+using Distributions
+Random.seed!(808)
+nsim = 100
+simλ = []
+
+mvn = MvNormal(λ, Matrix(Hermitian(covλ/N)))
+
+simλ = rand(mvn, nsim);
+#%%
+
+#%% simulate p
+psim = []
+
+for s in 1:nsim
+    ps = compute_allocation(q, X, simλ[:,s])
+    ps = ps * N
+    append!(psim, ps)
+end
+
+psim = reshape(psim, :, nsim);
+#%%
+
+#%% Monte Carlo error
+mce = [std(psim[i,:]) for i in 1:size(psim)[1]];
+#%%
+
+#%% Monte Carlo Coefficient of Variation
+mcv = p ./ mce;
+#%%
+
+#%% Descriptive stats for MCV
+mean(mcv)
+median(mcv)
+quantile(mcv, 0.25)
+quantile(mcv, 0.75)
+#%%
+
+#%% this plot is HUGE - be careful!
+# # Generally speaking, reliability issues are greatest (CV ~ 0.15)
+# # for very small allocation probabilities...
+# using Plots
+# plot(p, mcv, seriestype = :scatter)
 #%%
