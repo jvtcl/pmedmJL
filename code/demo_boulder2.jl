@@ -164,16 +164,16 @@ end
 #%%
 
 #%%
-using Optim
-
-init_λ = zeros(length(Y_vec));
-
-# - TRUST REGION needs Hessian function to run efficiently.
-#   With Hessian in hand, execution time is somewhat close to Rcpp version!
-#  Rcpp version ~22 sec; This version ~29 - 30sec.
-
-@time opt = optimize(f, g!, h!, init_λ, NewtonTrustRegion(),
-                    Optim.Options(show_trace=true, iterations = 200))
+# using Optim
+#
+# init_λ = zeros(length(Y_vec));
+#
+# # - TRUST REGION needs Hessian function to run efficiently.
+# #   With Hessian in hand, execution time is somewhat close to Rcpp version!
+# #  Rcpp version ~22 sec; This version ~29 - 30sec.
+#
+# opt = optimize(f, g!, h!, init_λ, NewtonTrustRegion(),
+#                 Optim.Options(show_trace=true, iterations = 200))
 #%%
 
 # - GRADIENT DESCENT does not converge at 1000 iterations
@@ -183,14 +183,28 @@ init_λ = zeros(length(Y_vec));
 #%%
 
 #%%
-# # Preconditioners don't work rn
+using Optim
+
+init_λ = zeros(length(Y_vec));
+
+# Preconditioners don't work rn
 # see: https://github.com/JuliaNLSolvers/Optim.jl/issues/763
 # but if they did ...
 # precond(n) = spdiagm(-1 => -ones(n-1), 0 => 2*ones(n), 1 => -ones(n-1))*(n+1);
-#
-# @time opt = optimize(f, g!, h!, init_λ, LBFGS(P = precond(length(init_λ))),
-#                     Optim.Options(show_trace=true, iterations = 1000));
 
+# updated version from github
+precond(n::Number) = Optim.InverseDiagonal(diag(spdiagm(-1 => -ones(n-1), 0 => 2*ones(n), 1 => -ones(n-1)) * (n+1)))
+
+opt = optimize(f, g!, h!, init_λ, ConjugateGradient(P = precond(length(init_λ))),
+               Optim.Options(show_trace=true, iterations = 200, g_tol = 1e-4));
+
+#%%
+
+#%%
+# # ConjugateGradient (incl. with increased gradient tolerance)
+# # also works ok/converges.
+# opt = optimize(f, g!, h!, init_λ, ConjugateGradient(),
+                    # Optim.Options(show_trace=true, iterations = 200, g_tol = 1e-4))
 #%%
 
 #%%check results
@@ -221,6 +235,8 @@ Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
 sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
 
 #%%
+
+
 
 #### Reliability Assessment
 
@@ -278,3 +294,24 @@ quantile(mcv, 0.75)
 # using Plots
 # plot(p, mcv, seriestype = :scatter)
 #%%
+
+# ##########
+# # λ from PMEDMrcpp solution
+# λref = collect(CSV.read("data/bou_lambda_pmedmrcpp.csv").x)
+#
+# f(λref)
+#
+# λ = λref
+# qXl = q .* exp.(-X * λ)
+# p = qXl / sum(qXl)
+#
+# Xp = X' * p
+# # lvl = λ' * (sV * λ);
+# lvl = λ' * (V_vec .* λ); # ALT
+#
+# (Y_vec' * λ) + log(sum(qXl)) + (0.5 * lvl)
+#
+# dot(λ, (sV * λ))
+# lvl
+#
+# log.(sum(qXl))
