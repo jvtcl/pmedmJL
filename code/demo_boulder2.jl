@@ -25,6 +25,16 @@ geo_lookup.bg = string.(geo_lookup.bg)
 geo_lookup.trt = string.(geo_lookup.trt);
 #%%
 
+#%% Ensure tract IDs between `constraints_trt` and `geo_lookup` are consistent
+tix = indexin(unique(geo_lookup.trt), string.(constraints_trt.GEOID));
+constraints_trt = constraints_trt[tix,:];
+#%%
+
+#%% sanity check
+sum(unique(geo_lookup.bg) .== string.(constraints_bg.GEOID)) == nrow(constraints_bg)
+sum(unique(geo_lookup.trt) .== string.(constraints_trt.GEOID)) == nrow(constraints_trt)
+#%%
+
 #%% PUMS response ids
 serial = collect(constraints_ind.pid);
 #%%
@@ -158,28 +168,9 @@ end
 h! = function(H, λ)
     qXl = q .* exp.(-X * λ)
     p = qXl / sum(qXl)
-    dp = sparse(Diagonal(p))
+    dp = spdiagm(0 => p)
     H[:] = -((X'p) * (p'X)) + (X' * dp * X) + sV
 end
-#%%
-
-#%%
-# using Optim
-#
-# init_λ = zeros(length(Y_vec));
-#
-# # - TRUST REGION needs Hessian function to run efficiently.
-# #   With Hessian in hand, execution time is somewhat close to Rcpp version!
-# #  Rcpp version ~22 sec; This version ~29 - 30sec.
-#
-# opt = optimize(f, g!, h!, init_λ, NewtonTrustRegion(),
-#                 Optim.Options(show_trace=true, iterations = 200))
-#%%
-
-# - GRADIENT DESCENT does not converge at 1000 iterations
-#   I think it needs a preconditioner
-# @time opt = optimize(f, g!, h!, init_λ, GradientDescent(),
-                    # Optim.Options(show_trace=true, iterations = 200,));
 #%%
 
 #%%
@@ -187,24 +178,26 @@ using Optim
 
 init_λ = zeros(length(Y_vec));
 
-# Preconditioners don't work rn
-# see: https://github.com/JuliaNLSolvers/Optim.jl/issues/763
-# but if they did ...
-# precond(n) = spdiagm(-1 => -ones(n-1), 0 => 2*ones(n), 1 => -ones(n-1))*(n+1);
+# - TRUST REGION needs Hessian function to run efficiently.
+#   With Hessian in hand, execution time is somewhat close to Rcpp version!
+#  Rcpp version ~22 sec; This version ~28 - 30sec.
 
-# updated version from github
-precond(n::Number) = Optim.InverseDiagonal(diag(spdiagm(-1 => -ones(n-1), 0 => 2*ones(n), 1 => -ones(n-1)) * (n+1)))
-
-opt = optimize(f, g!, h!, init_λ, ConjugateGradient(P = precond(length(init_λ))),
-               Optim.Options(show_trace=true, iterations = 200, g_tol = 1e-4));
-
+opt = optimize(f, g!, h!, init_λ, NewtonTrustRegion(),
+                Optim.Options(show_trace=true, iterations = 200))
 #%%
 
-#%%
-# # ConjugateGradient (incl. with increased gradient tolerance)
-# # also works ok/converges.
-# opt = optimize(f, g!, h!, init_λ, ConjugateGradient(),
-                    # Optim.Options(show_trace=true, iterations = 200, g_tol = 1e-4))
+#%% Solver with Preconditioner
+# # roughly as fast as Trust Region solver, but `g_tol` needs intervention
+# # so that it converges in <200 steps...
+# using Optim
+#
+# init_λ = zeros(length(Y_vec));
+#
+# # updated version from github
+# precond(n::Number) = Optim.InverseDiagonal(diag(spdiagm(-1 => -ones(n-1), 0 => 2*ones(n), 1 => -ones(n-1)) * (n+1)))
+#
+# opt = optimize(f, g!, h!, init_λ, ConjugateGradient(P = precond(length(init_λ))),
+#                Optim.Options(show_trace=true, iterations = 200, g_tol = 1e-4));
 #%%
 
 #%%check results
@@ -230,13 +223,12 @@ Ype.MOE_lower = Ype.Y - (sqrt.(Ype.V) * 1.645);
 Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
 
 # Proportion of contstraints falling outside 90% MOE
+# Bw 4.5-5% of constraints are unmatched in this solution
 # Init λ (0) ~60%
-# Rcpp version ~14.8%
+# Rcpp version ~14.8%??
 sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
 
 #%%
-
-
 
 #### Reliability Assessment
 
@@ -282,6 +274,8 @@ mcv = p ./ mce;
 #%%
 
 #%% Descriptive stats for MCV
+minimum(mcv)
+maximum(mcv)
 mean(mcv)
 median(mcv)
 quantile(mcv, 0.25)
@@ -294,24 +288,3 @@ quantile(mcv, 0.75)
 # using Plots
 # plot(p, mcv, seriestype = :scatter)
 #%%
-
-# ##########
-# # λ from PMEDMrcpp solution
-# λref = collect(CSV.read("data/bou_lambda_pmedmrcpp.csv").x)
-#
-# f(λref)
-#
-# λ = λref
-# qXl = q .* exp.(-X * λ)
-# p = qXl / sum(qXl)
-#
-# Xp = X' * p
-# # lvl = λ' * (sV * λ);
-# lvl = λ' * (V_vec .* λ); # ALT
-#
-# (Y_vec' * λ) + log(sum(qXl)) + (0.5 * lvl)
-#
-# dot(λ, (sV * λ))
-# lvl
-#
-# log.(sum(qXl))

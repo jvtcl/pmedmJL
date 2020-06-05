@@ -156,9 +156,18 @@ using Optim
 
 init_λ = zeros(length(Y_vec))
 
-@time opt = optimize(f, g!, h!, init_λ, NewtonTrustRegion(),
-            Optim.Options(show_trace=true, iterations = 200));
+opt = optimize(f, g!, h!, init_λ, NewtonTrustRegion(),
+               Optim.Options(show_trace=true, iterations = 200));
 
+#%%
+
+#%%
+# # with preconditioner
+# # updated version from github
+# precond(n::Number) = Optim.InverseDiagonal(diag(spdiagm(-1 => -ones(n-1), 0 => 2*ones(n), 1 => -ones(n-1)) * (n+1)))
+#
+# opt = optimize(f, g!, h!, init_λ, ConjugateGradient(P = precond(length(init_λ))),
+#                Optim.Options(show_trace=true, iterations = 200, g_tol = 1e-4));
 #%%
 
 #%%check results
