@@ -238,7 +238,8 @@ p = compute_allocation(q, X, λ);
 
 #%% compute covariances on λ (inverse Hessian)
 H = h!(Array{Float64}(undef, length(λ), length(λ)), λ);
-covλ = inv(H) / N;
+# covλ = inv(H) / N;
+covλ = inv(H);
 #%%
 
 #%% simulate λ
@@ -270,7 +271,7 @@ mce = [std(psim[i,:]) for i in 1:size(psim)[1]];
 #%%
 
 #%% Monte Carlo Coefficient of Variation
-mcv = p ./ mce;
+mcv = mce ./ (p * N);
 #%%
 
 #%% Descriptive stats for MCV
@@ -283,8 +284,8 @@ quantile(mcv, 0.75)
 #%%
 
 #%% this plot is HUGE - be careful!
-# # Generally speaking, reliability issues are greatest (CV ~ 0.15)
-# # for very small allocation probabilities...
+# Generally speaking, reliability issues are greatest (CV ~ 0.15)
+# for very small allocation probabilities...
 # using Plots
 # plot(p, mcv, seriestype = :scatter)
 #%%
