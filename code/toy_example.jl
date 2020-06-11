@@ -194,3 +194,18 @@ Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
 sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
 
 #%%
+
+A1x = Array()
+
+
+[[Int(occursin(G, g)) for g in geo_lookup[:,2]] for G in unique(geo_lookup[:,2])]
+
+
+A1x = Int64[]
+
+for G in unique(geo_lookup[:,2])
+    isG = [Int(occursin(G, g)) for g in geo_lookup[:,2]]
+    append!(A1x, isG)
+end
+
+A1x = reshape(A1x, (length(unique(geo_lookup[:,2])), nrow(geo_lookup)))

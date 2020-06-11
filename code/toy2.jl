@@ -14,6 +14,14 @@ constraints_bg = CSV.read("data/toy_constraints_bg.csv")
 constraints_trt = CSV.read("data/toy_constraints_trt.csv")
 #%%
 
+#%% build geo lookup
+# apply string conversion to bg GEOIDs
+bg_id = string.(collect(constraints_bg[!,1]))
+trt_id = [s[1:2] for s in bg_id]
+geo_lookup = DataFrame(bg = bg_id, trt = trt_id)
+geo_lookup = Array(geo_lookup)
+#%%
+
 #%% population and sample size
 N = sum(constraints_bg.POP);
 n = nrow(constraints_ind);
@@ -33,11 +41,13 @@ Y1 = convert(Matrix, constraints_trt[!,est_cols_trt])
 Y2 = convert(Matrix, constraints_bg[!,est_cols_bg]);
 #%%
 
-#%%
-# blah = pmedmobj(pX)
-# blah.pX
+#%% error variances
+se_cols = [endswith(i, 's') for i in names(constraints_bg)]
+se_cols = names(constraints_bg)[se_cols]
+V1 = map(x -> x^2, convert(Matrix, constraints_trt[!,se_cols]))
+V2 = map(x -> x^2, convert(Matrix, constraints_bg[!,se_cols]));
 #%%
 
 #%%
-blah = pmedmobj(Y1, Y2, N)
+blah = pmedmobj(geo_lookup, pX, Y1, Y2, V1, V2, N, n)
 #%%
