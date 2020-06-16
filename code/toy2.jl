@@ -56,32 +56,32 @@ V2 = map(x -> x^2, convert(Matrix, constraints_bg[!,se_cols]));
 gl = Array(geo_lookup)
 #%%
 
-#%%
-pmedmin = pmd(gl, pX, wt, Y1, Y2, V1, V2, N, n);
-#%%
-
-#%%
-pmedmin = pmedm_solve(pmedmin)
+#%% P-MEDM Data
+reg = pmd(gl, pX, wt, Y1, Y2, V1, V2, N, n);
 #%%
 
 #%%
-phat = reshape(pmedmin.p, size(pmedmin.A2)[1], size(pmedmin.pX)[1])'
+reg = pmedm_solve(reg)
+#%%
 
-Yhat2 = (pmedmin.N * phat)' * pmedmin.pX
+#%%
+phat = reshape(reg.p, size(reg.A2)[1], size(reg.pX)[1])'
 
-phat_trt = (phat * pmedmin.N) * pmedmin.A1'
-Yhat1 = phat_trt' * pmedmin.pX
+Yhat2 = (reg.N * phat)' * reg.pX
+
+phat_trt = (phat * reg.N) * reg.A1'
+Yhat1 = phat_trt' * reg.pX
 
 Yhat = vcat(vec(Yhat1), vec(Yhat2));
 
-Ype = DataFrame(Y = pmedmin.Y_vec * pmedmin.N,
-                Yhat = Yhat, V = pmedmin.V_vec * (pmedmin.N^2/pmedmin.n))
+Ype = DataFrame(Y = reg.Y_vec * reg.N,
+                Yhat = Yhat, V = reg.V_vec * (reg.N^2/reg.n))
 
 #90% MOEs
 Ype.MOE_lower = Ype.Y - (sqrt.(Ype.V) * 1.645);
 Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
 
 # Proportion of contstraints falling outside 90% MOE
-sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
-
+const_match = sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
+println(const_match)
 #%%
