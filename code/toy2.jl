@@ -85,3 +85,7 @@ Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
 const_match = sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
 println(const_match)
 #%%
+
+#%%
+psim = simulate_probabilities(reg);
+#%%

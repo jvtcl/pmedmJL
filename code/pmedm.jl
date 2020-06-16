@@ -5,8 +5,11 @@ using SparseArrays
 using LinearAlgebra
 using Kronecker
 using Optim
+using Random
+using Distributions
 
-export pmd, compute_allocation, pmedm_solve
+export pmd, compute_allocation, pmedm_solve,
+simulate_probabilities
 
 mutable struct pmd
 
@@ -130,5 +133,30 @@ pmedm_solve = function(pmd::pmd)
 
 end
 
+simulate_probabilities = function(pmd::pmd, nsim = 100, seed = 0)
+
+	covλ = inv(pmd.H)
+
+	simλ = []
+
+	Random.seed!(seed)
+	mvn = MvNormal(pmd.λ, Matrix(Hermitian(covλ / pmd.N)))
+
+	simλ = rand(mvn, nsim)
+
+	## simulate p
+	psim = []
+
+	for s in 1:nsim
+		pmds = pmd
+		pmds.λ = simλ[:,s]
+	    ps = compute_allocation(pmds)
+	    ps = ps * pmds.N
+	    append!(psim, ps)
+	end
+
+	reshape(psim, :, nsim);
+
+end
 
 end
