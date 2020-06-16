@@ -19,7 +19,11 @@ constraints_trt = CSV.read("data/toy_constraints_trt.csv")
 bg_id = string.(collect(constraints_bg[!,1]))
 trt_id = [s[1:2] for s in bg_id]
 geo_lookup = DataFrame(bg = bg_id, trt = trt_id)
-geo_lookup = Array(geo_lookup)
+# geo_lookup = Array(geo_lookup)
+#%%
+
+#%% sample weights
+wt = collect(constraints_ind.PERWT)
 #%%
 
 #%% population and sample size
@@ -49,5 +53,9 @@ V2 = map(x -> x^2, convert(Matrix, constraints_bg[!,se_cols]));
 #%%
 
 #%%
-blah = pmedmobj(geo_lookup, pX, Y1, Y2, V1, V2, N, n)
+gl = Array(geo_lookup)
+#%%
+
+#%%
+blah = pmd(gl, pX, wt, Y1, Y2, V1, V2, N, n)
 #%%

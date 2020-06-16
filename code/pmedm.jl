@@ -2,9 +2,11 @@ module Pmedm
 
 using DataFrames
 using SparseArrays
+using LinearAlgebra
+using Kronecker
 using Optim
 
-export f, g!, h!, pmedmobj
+export f, g!, h!, pmd
 
 f = function(λ)
 
@@ -32,38 +34,48 @@ h! = function(H, λ)
     H[:] = -((X'p) * (p'X)) + (X' * dp * X) + sV
 end
 
-mutable struct pmedmobj
+mutable struct pmd
 
     # inputs
     gl::Array{String,2}
     pX::Array{Int64,2}
+    wt::Vector{Int64}
     Y1::Array{Int64,2}
     Y2::Array{Int64,2}
-    V1::Float64{Int64,2}
+    V1::Array{Float64,2}
     V2::Array{Int64,2}
     N::Int64
     n::Int64
-    A1::Array{Int64}
-    A2::Array{Bool, 2}
+    A1::Array{Int64,2}
+    A2::Array{Bool,2}
     X::SparseMatrixCSC{Int64, Int64}
     Y_vec::Vector{Float64}
-    # V_vec::Vector{Float64}
-    sV::Array{Float64,2}
+    V_vec::Vector{Float64}
+	sV::Diagonal
     λ::Vector{Float64}
     q::Vector{Float64}
     p::Vector{Float64}
 
-    function pmedmobj(pX, Y1, Y2, V1, V2, N, n)
+    function pmd(gl::Array{String,2},
+				 pX::Array{Int64,2},
+	             wt::Vector{Int64},
+	             Y1::Array{Int64,2},
+	 		  	 Y2::Array{Int64,2},
+	 		  	 V1::Array{Float64,2},
+	   			 V2::Array{Int64,2},
+	 		  	 N::Int64,
+	 		  	 n::Int64)
 
         ## geographies
+		A0 = Int64[]
         for G in unique(gl[:,2])
-            isG = [Int(occursin(G, g)) for g in gl[:,2]]
-            append!(A1, isG)
+         isG = [Int(occursin(G, g)) for g in gl[:,2]]
+         append!(A0, isG)
         end
 
-        A1 = reshape(A1, (length(unique(gl[:,2])), nrow(gl)))
+        A1 = reshape(A0, (length(unique(gl[:,2])), size(gl)[1]))
 
-        A2 = Matrix(I, nrow(constraints_bg), nrow(constraints_bg))
+        A2 = Matrix(I, size(gl)[1], size(gl)[1])
 
         ## model matrix
         X1 = (sparse(pX') ⊗ A1)'
@@ -86,10 +98,11 @@ mutable struct pmedmobj
         ## coefficients
         λ = zeros(length(Y_vec))
 
-        ## probabilities
+        # probabilities
         p = zeros(length(q))
 
-        new(gl, pX, Y1, Y2, V1, V2, N, n, A1, A2, X, Y_vec, sV, λ, q, p)
+        new(gl, pX, wt, Y1, Y2, V1, V2, N, n, A1, A2, X,
+		    Y_vec, V_vec, sV, λ, q, p)
     end
 
 end
