@@ -48,7 +48,8 @@ mutable struct pmd
          append!(A0, isG)
         end
 
-        A1 = reshape(A0, (length(unique(gl[:,2])), size(gl)[1]))
+        # A1 = reshape(A0, (length(unique(gl[:,2])), size(gl)[1]))
+        A1 = reshape(A0, (size(gl)[1], length(unique(gl[:,2]))))'
 
         A2 = Matrix(I, size(gl)[1], size(gl)[1])
 
