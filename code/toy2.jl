@@ -57,5 +57,31 @@ gl = Array(geo_lookup)
 #%%
 
 #%%
-blah = pmd(gl, pX, wt, Y1, Y2, V1, V2, N, n)
+pmedmin = pmd(gl, pX, wt, Y1, Y2, V1, V2, N, n);
+#%%
+
+#%%
+pmedmin = pmedm_solve(pmedmin)
+#%%
+
+#%%
+phat = reshape(pmedmin.p, size(pmedmin.A2)[1], size(pmedmin.pX)[1])'
+
+Yhat2 = (pmedmin.N * phat)' * pmedmin.pX
+
+phat_trt = (phat * pmedmin.N) * pmedmin.A1'
+Yhat1 = phat_trt' * pmedmin.pX
+
+Yhat = vcat(vec(Yhat1), vec(Yhat2));
+
+Ype = DataFrame(Y = pmedmin.Y_vec * pmedmin.N,
+                Yhat = Yhat, V = pmedmin.V_vec * (pmedmin.N^2/pmedmin.n))
+
+#90% MOEs
+Ype.MOE_lower = Ype.Y - (sqrt.(Ype.V) * 1.645);
+Ype.MOE_upper = Ype.Y + (sqrt.(Ype.V) * 1.645);
+
+# Proportion of contstraints falling outside 90% MOE
+sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 1) / nrow(Ype)
+
 #%%

@@ -6,33 +6,8 @@ using LinearAlgebra
 using Kronecker
 using Optim
 
-export f, g!, h!, pmd
-
-f = function(λ)
-
-    qXl = q .* exp.(-X * λ)
-    p = qXl / sum(qXl)
-
-    Xp = X' * p
-    lvl = λ' * (sV * λ);
-
-    return (Y_vec' * λ) + log(sum(qXl)) + (0.5 * lvl)
-
-end
-
-g! = function(G, λ)
-    qXl = q .* exp.(-X * λ)
-    p = qXl / sum(qXl)
-    Xp = X'p
-    G[:] = Y_vec + (sV * λ) - Xp
-end
-
-h! = function(H, λ)
-    qXl = q .* exp.(-X * λ)
-    p = qXl / sum(qXl)
-    dp = spdiagm(0 => p)
-    H[:] = -((X'p) * (p'X)) + (X' * dp * X) + sV
-end
+# export pmd, f, g!, h!, pmedm_solve
+export pmd, compute_allocation, pmedm_solve
 
 mutable struct pmd
 
@@ -106,5 +81,57 @@ mutable struct pmd
     end
 
 end
+
+compute_allocation = function(pmd::pmd)
+
+    qXl = pmd.q .* exp.(-pmd.X * pmd.λ)
+	qXl / sum(qXl)
+
+end
+
+pmedm_solve = function(pmd::pmd)
+
+	f = function(λ)
+
+		qXl = q .* exp.(-X * λ)
+		p = qXl / sum(qXl)
+
+		Xp = X' * p
+		lvl = λ' * (sV * λ);
+
+		return (Y_vec' * λ) + log(sum(qXl)) + (0.5 * lvl)
+
+	end
+
+	g! = function(G, λ)
+		qXl = q .* exp.(-X * λ)
+		p = qXl / sum(qXl)
+		Xp = X'p
+		G[:] = Y_vec + (sV * λ) - Xp
+	end
+
+	h! = function(H, λ)
+		qXl = q .* exp.(-X * λ)
+		p = qXl / sum(qXl)
+		dp = spdiagm(0 => p)
+		H[:] = -((X'p) * (p'X)) + (X' * dp * X) + sV
+	end
+
+	q = pmd.q
+	X = pmd.X
+	λ = pmd.λ
+	Y_vec = pmd.Y_vec
+	sV = pmd.sV
+
+	opt = optimize(f, g!, h!, λ, NewtonTrustRegion(),
+	               Optim.Options(show_trace=true, iterations = 200))
+
+	pmd.λ = Optim.minimizer(opt)
+	pmd.p = compute_allocation(pmd)
+
+	return pmd
+
+end
+
 
 end
