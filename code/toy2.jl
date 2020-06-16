@@ -86,6 +86,6 @@ const_match = sum((Ype.Yhat .< Ype.MOE_lower) + (Ype.Yhat .> Ype.MOE_upper) .>= 
 println(const_match)
 #%%
 
-#%%
+#%% Simulate P-MEDM Probabilities
 psim = simulate_probabilities(reg);
 #%%
